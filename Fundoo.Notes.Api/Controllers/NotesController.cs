@@ -27,7 +27,8 @@ namespace Fundoo.Notes.Api.Controllers
         {
             // 1. Direct from authenticated user's JWT claims (OAuth)
             var claimVal = User.FindFirst("user_id")?.Value
-                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                        ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                        ?? User.FindFirst("sub")?.Value;
             if (int.TryParse(claimVal, out int id) && id > 0)
             {
                 return id;
@@ -53,6 +54,16 @@ namespace Fundoo.Notes.Api.Controllers
         public async Task<IActionResult> CreateNote([FromBody] NoteCreationModel note)
         {
             var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<NoteEntity>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
             var entity = await _sender.Send(new CreateNoteCommand(note, userId));
 
             return Ok(new ResponseModel<NoteEntity>

@@ -1,6 +1,10 @@
 using Asp.Versioning;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
+using System.Net.Http.Headers;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Fundoo.User.Domain.Models;
@@ -17,11 +21,13 @@ namespace Fundoo.User.Api.Controllers
     {
         private readonly ISender _sender;
         private readonly INotesServiceClient? _notesClient;
+        private readonly IConfiguration? _configuration;
 
-        public UserController(ISender sender, INotesServiceClient? notesClient = null)
+        public UserController(ISender sender, INotesServiceClient? notesClient = null, IConfiguration? configuration = null)
         {
             _sender = sender;
             _notesClient = notesClient;
+            _configuration = configuration;
         }
 
         [HttpGet("version")]
@@ -105,20 +111,7 @@ namespace Fundoo.User.Api.Controllers
             return BadRequest(res);
         }
 
-        // ==================== SSO (Single Sign-On) Endpoints ====================
-
-        [HttpPost("sso/login")]
-        [EnableRateLimiting("login-policy")]
-        public async Task<IActionResult> SsoLogin([FromBody] SsoLoginRequestModel model)
-        {
-            var result = await _sender.Send(new SsoLoginCommand(model));
-            return Ok(new ResponseModel<SsoLoginResponseModel>
-            {
-                Success = true,
-                Message = result.IsNewUser ? "SSO User registered and logged in successfully" : "SSO Login successful",
-                Data = result
-            });
-        }
+        // ==================== Real Google OAuth 2.0 / SSO Endpoints ====================
 
         [Authorize]
         [HttpGet("sso/userinfo")]
@@ -139,6 +132,177 @@ namespace Fundoo.User.Api.Controllers
                 EmailVerified = true,
                 Provider = provider
             });
+        }
+
+        /// <summary>
+        /// Initiates the OAuth 2.0 redirect flow with Google.
+        /// When hit in a browser, redirects to accounts.google.com for login.
+        /// </summary>
+        [HttpGet("login-google")]
+        public IActionResult LoginGoogle([FromQuery] string? returnUrl = null)
+        {
+            var googleClientId = _configuration?["Authentication:Google:ClientId"];
+            if (string.IsNullOrWhiteSpace(googleClientId) || googleClientId.StartsWith("YOUR_GOOGLE_CLIENT_ID", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new ResponseModel<object>
+                {
+                    Success = false,
+                    Message = "Google OAuth is not configured. Please specify your Google ClientId and ClientSecret under Authentication:Google in appsettings.json.",
+                    Data = null
+                });
+            }
+
+            var redirectUrl = Url.Action(nameof(GoogleCallback), "User", new { returnUrl });
+            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
+            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+        }
+
+        /// <summary>
+        /// Callback endpoint that Google redirects back to after user authenticates on Google.
+        /// </summary>
+        [HttpGet("google-callback")]
+        public async Task<IActionResult> GoogleCallback([FromQuery] string? returnUrl = null)
+        {
+            var authResult = await HttpContext.AuthenticateAsync("ExternalCookies");
+            if (!authResult.Succeeded || authResult.Principal == null)
+            {
+                return Unauthorized(new ResponseModel<object>
+                {
+                    Success = false,
+                    Message = "Google OAuth authentication failed or was cancelled.",
+                    Data = null
+                });
+            }
+
+            var claims = authResult.Principal.Identities.FirstOrDefault()?.Claims;
+            var email = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var name = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value ?? "Google User";
+            var googleId = claims?.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value ?? Guid.NewGuid().ToString();
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return BadRequest(new ResponseModel<object>
+                {
+                    Success = false,
+                    Message = "Email claim not received from Google account.",
+                    Data = null
+                });
+            }
+
+            var names = name.Split(' ', 2);
+            var firstName = names.Length > 0 ? names[0] : name;
+            var lastName = names.Length > 1 ? names[1] : "";
+
+            var result = await _sender.Send(new SsoLoginCommand(new SsoLoginRequestModel
+            {
+                Provider = "Google",
+                Email = email,
+                FirstName = firstName,
+                LastName = lastName,
+                IdToken = googleId
+            }));
+
+            // Sign out of the temporary external cookie
+            await HttpContext.SignOutAsync("ExternalCookies");
+
+            return Ok(new ResponseModel<SsoLoginResponseModel>
+            {
+                Success = true,
+                Message = result.RequiresTwoFactor
+                    ? "Google authentication verified. Two-Factor Authentication required."
+                    : "Logged in successfully via Google OAuth.",
+                Data = result
+            });
+        }
+
+        /// <summary>
+        /// Direct Google Token Verification for Postman, Mobile apps, or SPAs.
+        /// Accepts a Google OAuth access_token or id_token, verifies it against Google API, and logs the user in.
+        /// </summary>
+        [HttpPost("sso/google-token")]
+        [EnableRateLimiting("login-policy")]
+        public async Task<IActionResult> GoogleTokenLogin([FromBody] GoogleTokenLoginRequestModel model)
+        {
+            if (string.IsNullOrWhiteSpace(model.Token))
+            {
+                return BadRequest(new ResponseModel<object>
+                {
+                    Success = false,
+                    Message = "Google OAuth token is required.",
+                    Data = null
+                });
+            }
+
+            try
+            {
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", model.Token);
+                var response = await client.GetAsync("https://www.googleapis.com/oauth2/v3/userinfo");
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Fallback check as id_token endpoint
+                    var idTokenRes = await client.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(model.Token)}");
+                    if (!idTokenRes.IsSuccessStatusCode)
+                    {
+                        return Unauthorized(new ResponseModel<object>
+                        {
+                            Success = false,
+                            Message = "Invalid or expired Google OAuth token.",
+                            Data = null
+                        });
+                    }
+                    response = idTokenRes;
+                }
+
+                using var stream = await response.Content.ReadAsStreamAsync();
+                using var doc = await JsonDocument.ParseAsync(stream);
+                var root = doc.RootElement;
+
+                var email = root.TryGetProperty("email", out var e) ? e.GetString() : null;
+                var name = root.TryGetProperty("name", out var n) ? n.GetString() : "Google User";
+                var sub = root.TryGetProperty("sub", out var s) ? s.GetString() : Guid.NewGuid().ToString();
+
+                if (string.IsNullOrWhiteSpace(email))
+                {
+                    return BadRequest(new ResponseModel<object>
+                    {
+                        Success = false,
+                        Message = "Could not extract email from Google token.",
+                        Data = null
+                    });
+                }
+
+                var names = name?.Split(' ', 2) ?? new[] { "Google", "User" };
+                var firstName = names.Length > 0 ? names[0] : "Google";
+                var lastName = names.Length > 1 ? names[1] : "";
+
+                var result = await _sender.Send(new SsoLoginCommand(new SsoLoginRequestModel
+                {
+                    Provider = "Google",
+                    Email = email,
+                    FirstName = firstName,
+                    LastName = lastName,
+                    IdToken = sub
+                }));
+
+                return Ok(new ResponseModel<SsoLoginResponseModel>
+                {
+                    Success = true,
+                    Message = result.RequiresTwoFactor
+                        ? "Google OAuth token verified. Two-Factor Authentication required."
+                        : "Logged in successfully with Google OAuth.",
+                    Data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new ResponseModel<object>
+                {
+                    Success = false,
+                    Message = $"Error verifying Google token: {ex.Message}",
+                    Data = null
+                });
+            }
         }
 
         // ==================== 2FA (Two-Factor Authentication) Endpoints ====================

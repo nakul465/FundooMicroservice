@@ -167,8 +167,12 @@ public class Program
 
         builder.Services.AddEndpointsApiExplorer();
 
-        builder.Services
-            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        var authBuilder = builder.Services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
             .AddJwtBearer(options =>
             {
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -187,7 +191,28 @@ public class Program
                         Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#")),
                     ClockSkew = TimeSpan.FromMinutes(1)
                 };
+            })
+            .AddCookie("ExternalCookies", options =>
+            {
+                options.Cookie.SameSite = SameSiteMode.Lax;
             });
+
+        var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+        var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+        var isGoogleConfigured = !string.IsNullOrWhiteSpace(googleClientId) &&
+                                 !string.IsNullOrWhiteSpace(googleClientSecret) &&
+                                 !googleClientId.StartsWith("YOUR_GOOGLE_CLIENT_ID", StringComparison.OrdinalIgnoreCase);
+
+        if (isGoogleConfigured)
+        {
+            authBuilder.AddGoogle(options =>
+            {
+                options.SignInScheme = "ExternalCookies";
+                options.ClientId = googleClientId!;
+                options.ClientSecret = googleClientSecret!;
+                options.SaveTokens = true;
+            });
+        }
 
         builder.Services.AddSwaggerGen(options =>
         {

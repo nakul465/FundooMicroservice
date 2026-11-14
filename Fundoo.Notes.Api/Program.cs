@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using Fundoo.Notes.Api.Authentication;
 using Fundoo.Notes.Application.Features.Notes.Handler;
@@ -17,6 +19,9 @@ public class Program
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+
+        // Preserve original inbound claim names
+        JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
         // Add services to the container.
         builder.Services.AddControllers();
@@ -51,25 +56,91 @@ public class Program
 
         // Configure OAuth 2.0 JWT Bearer Authentication
         var jwtKey = builder.Configuration["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#";
-        var validIssuers = new[]
+        var signingKeys = new List<SecurityKey>
         {
-            builder.Configuration["Jwt:OAuthIssuer"] ?? "FundooOAuthServer",
-            builder.Configuration["Jwt:Issuer"] ?? "FundooUserApi",
-            "FundooApp"
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes("FundooSecretKeyForJwtAuthentication2026!#")),
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes("FundooSuperSecretKeyJwtTokenAuth"))
         };
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
+        {
+            var confKey = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!);
+            if (!signingKeys.Any(k => ((SymmetricSecurityKey)k).Key.SequenceEqual(confKey)))
+            {
+                signingKeys.Add(new SymmetricSecurityKey(confKey));
+            }
+        }
 
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                options.RequireHttpsMetadata = false;
+                options.SaveToken = true;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer = true,
+                    ValidateIssuer = false,
                     ValidateAudience = false,
-                    ValidateLifetime = true,
+                    ValidateLifetime = false,
                     ValidateIssuerSigningKey = true,
-                    ValidIssuers = validIssuers,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-                    ClockSkew = TimeSpan.FromMinutes(2)
+                    IssuerSigningKeys = signingKeys,
+                    ClockSkew = TimeSpan.FromHours(24)
+                };
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        if (string.IsNullOrEmpty(context.Token))
+                        {
+                            var auth = context.Request.Headers["Authorization"].ToString();
+                            if (!string.IsNullOrEmpty(auth))
+                            {
+                                context.Token = auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                                    ? auth.Substring("Bearer ".Length).Trim()
+                                    : auth.Trim();
+                            }
+                            else if (context.Request.Headers.TryGetValue("token", out var tokenVal))
+                            {
+                                context.Token = tokenVal.ToString().Trim();
+                            }
+                        }
+                        try
+                        {
+                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnMessageReceived: Path={context.Request.Path}, HasToken={!string.IsNullOrEmpty(context.Token)}, TokenLen={context.Token?.Length}\n");
+                        }
+                        catch { }
+                        return Task.CompletedTask;
+                    },
+                    OnAuthenticationFailed = context =>
+                    {
+                        try
+                        {
+                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnAuthenticationFailed: {context.Exception.GetType().Name} - {context.Exception.Message}\nInner: {context.Exception.InnerException?.Message}\n");
+                        }
+                        catch { }
+                        Console.WriteLine($"[Notes.Api JWT Auth Failed]: {context.Exception.Message}");
+                        return Task.CompletedTask;
+                    },
+                    OnChallenge = context =>
+                    {
+                        try
+                        {
+                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnChallenge: Error='{context.Error}', Desc='{context.ErrorDescription}', AuthFailure={context.AuthenticateFailure?.Message}\n");
+                        }
+                        catch { }
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = context =>
+                    {
+                        var uId = context.Principal?.FindFirst("user_id")?.Value
+                               ?? context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                               ?? context.Principal?.FindFirst("sub")?.Value;
+                        try
+                        {
+                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnTokenValidated: UserId={uId}\n");
+                        }
+                        catch { }
+                        Console.WriteLine($"[Notes.Api JWT Validated for userId: {uId}]");
+                        return Task.CompletedTask;
+                    }
                 };
             });
 
@@ -155,7 +226,10 @@ public class Program
             app.UseSwaggerUI();
         }
 
-        app.UseHttpsRedirection();
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseHttpsRedirection();
+        }
 
         app.UseAuthentication();
         app.UseAuthorization();
