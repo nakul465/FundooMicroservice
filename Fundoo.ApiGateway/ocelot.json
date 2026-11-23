@@ -1,6 +1,21 @@
 {
   "Routes": [
     {
+      "DownstreamPathTemplate": "/signin-google",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "user-service",
+          "Port": 80
+        }
+      ],
+      "UpstreamPathTemplate": "/signin-google",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
       "DownstreamPathTemplate": "/api/v{version}/user/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [

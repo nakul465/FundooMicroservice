@@ -49,6 +49,8 @@ spec:
               value: "YOUR_GOOGLE_CLIENT_ID"
             - name: Authentication__Google__ClientSecret
               value: "YOUR_GOOGLE_CLIENT_SECRET"
+            - name: Authentication__Google__PublicBaseUrl
+              value: "https://172.198.78.144.sslip.io"
 ---
 apiVersion: v1
 kind: Service

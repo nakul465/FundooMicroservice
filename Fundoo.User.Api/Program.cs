@@ -210,6 +210,13 @@ public class Program
                 options.Cookie.SameSite = SameSiteMode.Lax;
             });
 
+        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.All;
+            options.KnownNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
+
         var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
         var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
         var isGoogleConfigured = !string.IsNullOrWhiteSpace(googleClientId) &&
@@ -224,6 +231,32 @@ public class Program
                 options.ClientId = googleClientId!;
                 options.ClientSecret = googleClientSecret!;
                 options.SaveTokens = true;
+                options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+
+                var publicBaseUrl = builder.Configuration["Authentication:Google:PublicBaseUrl"];
+                if (!string.IsNullOrWhiteSpace(publicBaseUrl))
+                {
+                    options.Events.OnRedirectToAuthorizationEndpoint = context =>
+                    {
+                        var uriBuilder = new UriBuilder(context.RedirectUri);
+                        var query = System.Web.HttpUtility.ParseQueryString(uriBuilder.Query);
+                        var baseUri = new Uri(publicBaseUrl.TrimEnd('/'));
+                        var redirectParam = query["redirect_uri"];
+                        if (!string.IsNullOrEmpty(redirectParam))
+                        {
+                            var redirectUriBuilder = new UriBuilder(redirectParam)
+                            {
+                                Scheme = baseUri.Scheme,
+                                Host = baseUri.Host,
+                                Port = baseUri.IsDefaultPort ? -1 : baseUri.Port
+                            };
+                            query["redirect_uri"] = redirectUriBuilder.ToString();
+                            uriBuilder.Query = query.ToString();
+                        }
+                        context.Response.Redirect(uriBuilder.ToString());
+                        return Task.CompletedTask;
+                    };
+                }
             });
         }
 
@@ -281,6 +314,7 @@ public class Program
             });
         }
 
+        app.UseForwardedHeaders();
         app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();
