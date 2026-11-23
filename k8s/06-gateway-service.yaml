@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: gateway-service
-          image: fundoo-gateway:live
-          imagePullPolicy: IfNotPresent
+          image: nakul465/fundoo-gateway:live
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:

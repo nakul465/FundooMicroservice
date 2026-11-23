@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: user-service
-          image: fundoo-user:live
-          imagePullPolicy: IfNotPresent
+          image: nakul465/fundoo-user:live
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:
