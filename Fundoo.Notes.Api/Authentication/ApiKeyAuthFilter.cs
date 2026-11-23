@@ -38,11 +38,9 @@ namespace Fundoo.Notes.Api.Authentication
                 await next();
                 return;
             }
+
             if (!hasSecret)
             {
-                // #region agent log
-                try { System.IO.File.AppendAllText("/Users/nakularora/Documents/FundooMicroService/.cursor/debug-b18336.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "b18336", hypothesisId = "A", location = "ApiKeyAuthFilter.cs:missing-secret", message = "Rejecting because X-Internal-Secret-Key is missing", data = new { path = request.Path.Value }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
-                // #endregion
                 context.Result = new UnauthorizedObjectResult(new
                 {
                     success = false,
@@ -51,12 +49,9 @@ namespace Fundoo.Notes.Api.Authentication
                 return;
             }
 
-            var configuredKey = _configuration["InternalServiceAuth:SecretKey"] ?? "FundooSecretKeyForJwtAuthentication2026!#";
+            var configuredKey = _configuration["InternalServiceAuth:SecretKey"];
             if (string.IsNullOrEmpty(configuredKey) || !configuredKey.Equals(extractedKey.ToString()))
             {
-                // #region agent log
-                try { System.IO.File.AppendAllText("/Users/nakularora/Documents/FundooMicroService/.cursor/debug-b18336.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "b18336", hypothesisId = "A", location = "ApiKeyAuthFilter.cs:invalid-secret", message = "Rejecting because internal secret key does not match", data = new { configuredKeyPresent = !string.IsNullOrEmpty(configuredKey), extractedKeyLength = extractedKey.ToString().Length }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
-                // #endregion
                 context.Result = new UnauthorizedObjectResult(new
                 {
                     success = false,
@@ -77,10 +72,6 @@ namespace Fundoo.Notes.Api.Authentication
             }
 
             context.HttpContext.Items["UserId"] = userId;
-            // #region agent log
-            try { System.IO.File.AppendAllText("/Users/nakularora/Documents/FundooMicroService/.cursor/debug-b18336.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "b18336", runId = "post-fix", hypothesisId = "A", location = "ApiKeyAuthFilter.cs:authorized", message = "Notes auth filter accepted request", data = new { path = request.Path.Value, userId }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
-            // #endregion
-
             await next();
         }
     }

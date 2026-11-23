@@ -94,8 +94,7 @@
         "AllowedScopes": []
       },
       "AddHeadersToRequest": {
-        "X-User-Id": "Claims[user_id] > value",
-        "X-Internal-Secret-Key": "FundooSecretKeyForJwtAuthentication2026!#"
+        "X-User-Id": "Claims[user_id] > value"
       },
       "RateLimitOptions": {
         "EnableRateLimiting": true,

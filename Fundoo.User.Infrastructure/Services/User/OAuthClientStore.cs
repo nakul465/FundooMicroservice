@@ -14,10 +14,10 @@ namespace Fundoo.User.Infrastructure.Services.User
 
         public OAuthClientStore(IConfiguration configuration)
         {
-            // Register standard microservice clients (can be extended via appsettings)
-            var userSecret = configuration["OAuth:Clients:UserService:Secret"] ?? "UserSvcSecret_2026!#";
-            var gatewaySecret = configuration["OAuth:Clients:GatewayService:Secret"] ?? "GatewaySvcSecret_2026!#";
-            var notifySecret = configuration["OAuth:Clients:NotificationService:Secret"] ?? "NotifySvcSecret_2026!#";
+            // Register standard microservice clients (configured via user secrets or environment variables)
+            var userSecret = configuration["OAuth:Clients:UserService:Secret"] ?? "";
+            var gatewaySecret = configuration["OAuth:Clients:GatewayService:Secret"] ?? "";
+            var notifySecret = configuration["OAuth:Clients:NotificationService:Secret"] ?? "";
 
             _clients["user-service"] = new OAuthClient
             {

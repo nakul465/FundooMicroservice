@@ -1,8 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using System.Text;
-using System.Text.Json;
 using Fundoo.User.Application.Services;
 using Fundoo.User.Domain.Models;
 using Microsoft.Extensions.Configuration;
@@ -19,9 +20,19 @@ namespace Fundoo.User.Infrastructure.Services.User
             _config = user;
         }
 
+        private string GetJwtKey()
+        {
+            var key = _config["Jwt:Key"];
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new InvalidOperationException("Jwt:Key configuration is missing.");
+            }
+            return key;
+        }
+
         public string GenerateToken(UserResponseModel user)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#"));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetJwtKey()));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var claims = new List<Claim>
             {
@@ -38,7 +49,6 @@ namespace Fundoo.User.Infrastructure.Services.User
             }
             var issuer = _config["Jwt:Issuer"] ?? "FundooUserApi";
             var audience = _config["Jwt:Audience"] ?? "FundooUserClient";
-            var jwtKey = _config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#";
             var token = new JwtSecurityToken(
                 issuer: issuer,
                 audience: audience,
@@ -47,16 +57,12 @@ namespace Fundoo.User.Infrastructure.Services.User
                 signingCredentials: credentials
             );
 
-            var written = new JwtSecurityTokenHandler().WriteToken(token);
-            // #region agent log
-            try { System.IO.File.AppendAllText("/Users/nakularora/Documents/FundooMicroService/.cursor/debug-b18336.log", System.Text.Json.JsonSerializer.Serialize(new { sessionId = "b18336", hypothesisId = "B", location = "JwtService.cs:GenerateToken", message = "Login JWT generated", data = new { issuer, audience, keyLength = jwtKey.Length, userId = user.UserId, tokenLength = written.Length }, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }) + "\n"); } catch { }
-            // #endregion
-            return written;
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
         public string GeneratePasswordResetToken(string email)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#"));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetJwtKey()));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]
@@ -80,8 +86,7 @@ namespace Fundoo.User.Infrastructure.Services.User
         {
             try
             {
-                var key = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#"));
+                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetJwtKey()));
 
                 var tokenHandler = new JwtSecurityTokenHandler();
 
@@ -130,7 +135,7 @@ namespace Fundoo.User.Infrastructure.Services.User
 
         public string GenerateTwoFactorSessionToken(int userId, string email, string twoFactorType)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#"));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetJwtKey()));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]
@@ -159,8 +164,7 @@ namespace Fundoo.User.Infrastructure.Services.User
         {
             try
             {
-                var key = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#"));
+                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetJwtKey()));
 
                 var tokenHandler = new JwtSecurityTokenHandler();
 
@@ -202,7 +206,7 @@ namespace Fundoo.User.Infrastructure.Services.User
 
         public string GenerateOAuthToken(string clientId, IEnumerable<string> scopes, IEnumerable<string> audiences, int expirySeconds = 1800)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#"));
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetJwtKey()));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var scopeList = scopes?.ToList() ?? new List<string>();
@@ -242,8 +246,7 @@ namespace Fundoo.User.Infrastructure.Services.User
         {
             try
             {
-                var key = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#"));
+                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(GetJwtKey()));
 
                 var tokenHandler = new JwtSecurityTokenHandler();
 

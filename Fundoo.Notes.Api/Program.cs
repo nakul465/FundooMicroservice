@@ -20,6 +20,12 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        if (builder.Environment.IsDevelopment())
+        {
+            builder.Configuration.AddUserSecrets<Program>(optional: true);
+        }
+        builder.Configuration.AddEnvironmentVariables();
+
         // Preserve original inbound claim names
         JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
@@ -55,20 +61,13 @@ public class Program
         builder.Services.AddScoped<ApiKeyAuthFilter>();
 
         // Configure OAuth 2.0 JWT Bearer Authentication
-        var jwtKey = builder.Configuration["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#";
+        var jwtKey = builder.Configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException("Jwt:Key configuration is missing.");
+
         var signingKeys = new List<SecurityKey>
         {
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes("FundooSecretKeyForJwtAuthentication2026!#")),
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes("FundooSuperSecretKeyJwtTokenAuth"))
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
-        if (!string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
-        {
-            var confKey = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!);
-            if (!signingKeys.Any(k => ((SymmetricSecurityKey)k).Key.SequenceEqual(confKey)))
-            {
-                signingKeys.Add(new SymmetricSecurityKey(confKey));
-            }
-        }
 
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -102,43 +101,6 @@ public class Program
                                 context.Token = tokenVal.ToString().Trim();
                             }
                         }
-                        try
-                        {
-                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnMessageReceived: Path={context.Request.Path}, HasToken={!string.IsNullOrEmpty(context.Token)}, TokenLen={context.Token?.Length}\n");
-                        }
-                        catch { }
-                        return Task.CompletedTask;
-                    },
-                    OnAuthenticationFailed = context =>
-                    {
-                        try
-                        {
-                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnAuthenticationFailed: {context.Exception.GetType().Name} - {context.Exception.Message}\nInner: {context.Exception.InnerException?.Message}\n");
-                        }
-                        catch { }
-                        Console.WriteLine($"[Notes.Api JWT Auth Failed]: {context.Exception.Message}");
-                        return Task.CompletedTask;
-                    },
-                    OnChallenge = context =>
-                    {
-                        try
-                        {
-                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnChallenge: Error='{context.Error}', Desc='{context.ErrorDescription}', AuthFailure={context.AuthenticateFailure?.Message}\n");
-                        }
-                        catch { }
-                        return Task.CompletedTask;
-                    },
-                    OnTokenValidated = context =>
-                    {
-                        var uId = context.Principal?.FindFirst("user_id")?.Value
-                               ?? context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                               ?? context.Principal?.FindFirst("sub")?.Value;
-                        try
-                        {
-                            File.AppendAllText("/tmp/fundoo_notes_auth.log", $"[{DateTime.UtcNow:O}] OnTokenValidated: UserId={uId}\n");
-                        }
-                        catch { }
-                        Console.WriteLine($"[Notes.Api JWT Validated for userId: {uId}]");
                         return Task.CompletedTask;
                     }
                 };

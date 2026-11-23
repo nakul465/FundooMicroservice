@@ -22,6 +22,12 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        if (builder.Environment.IsDevelopment())
+        {
+            builder.Configuration.AddUserSecrets<Program>(optional: true);
+        }
+        builder.Configuration.AddEnvironmentVariables();
+
         // Add services to the container.
         builder.Services.AddControllers();
 
@@ -48,7 +54,8 @@ public class Program
         {
             var configuration = services.GetRequiredService<IConfiguration>();
 
-            var baseUrl = configuration["NotificationService:BaseUrl"];
+            var baseUrl = configuration["NotificationService:BaseUrl"]
+                ?? throw new InvalidOperationException("NotificationService:BaseUrl configuration is missing.");
 
             client.BaseAddress = new Uri(baseUrl);
         })
@@ -95,7 +102,7 @@ public class Program
         builder.Services.AddHttpClient<INotesServiceClient, NotesServiceClient>((services, client) =>
         {
             var configuration = services.GetRequiredService<IConfiguration>();
-            var baseUrl = configuration["NotesService:BaseUrl"] ?? "http://localhost:5025";
+            var baseUrl = configuration["NotesService:BaseUrl"];
             client.BaseAddress = new Uri(baseUrl);
         })
         .AddHttpMessageHandler<OAuthDelegatingHandler>();
@@ -161,11 +168,17 @@ public class Program
         builder.Services.AddSingleton<IOAuthTokenService, OAuthTokenService>();
         builder.Services.AddTransient<OAuthDelegatingHandler>();
 
+        var connectionString = builder.Configuration.GetConnectionString("FundooConnection")
+            ?? throw new InvalidOperationException("Connection string 'FundooConnection' is missing.");
+
         builder.Services.AddDbContext<FundooContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("FundooConnection"))
+            options.UseNpgsql(connectionString)
         );
 
         builder.Services.AddEndpointsApiExplorer();
+
+        var jwtKey = builder.Configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException("Jwt:Key configuration is missing.");
 
         var authBuilder = builder.Services
             .AddAuthentication(options =>
@@ -188,7 +201,7 @@ public class Program
                         "FundooApp"
                     },
                     IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#")),
+                        Encoding.UTF8.GetBytes(jwtKey)),
                     ClockSkew = TimeSpan.FromMinutes(1)
                 };
             })

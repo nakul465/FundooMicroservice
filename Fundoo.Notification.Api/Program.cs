@@ -16,6 +16,12 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        if (builder.Environment.IsDevelopment())
+        {
+            builder.Configuration.AddUserSecrets<Program>(optional: true);
+        }
+        builder.Configuration.AddEnvironmentVariables();
+
         // Add services to the container.
         builder.Services.AddControllers();
 
@@ -25,7 +31,8 @@ public class Program
         builder.Services.AddScoped<IEmailService, EmailService>();
 
         // Configure OAuth 2.0 JWT Bearer Authentication for Service-to-Service communication
-        var jwtKey = builder.Configuration["Jwt:Key"] ?? "FundooSecretKeyForJwtAuthentication2026!#";
+        var jwtKey = builder.Configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException("Jwt:Key configuration is missing.");
         var validIssuers = new[]
         {
             builder.Configuration["Jwt:OAuthIssuer"] ?? "FundooOAuthServer",

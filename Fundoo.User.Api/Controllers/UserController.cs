@@ -80,7 +80,7 @@ namespace Fundoo.User.Api.Controllers
 
         [Authorize]
         [HttpGet("profile")]
-        public async Task<IActionResult> Profile()
+        public IActionResult Profile()
         {
             string? userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             string? email = User.FindFirst(ClaimTypes.Email)?.Value;
