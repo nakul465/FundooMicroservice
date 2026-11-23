@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: fundoo-notification:live
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ASPNETCORE_URLS
+              value: "http://+:80"
+            - name: Jwt__Key
+              value: "FundooSecretKeyForJwtAuthentication2026!#"
+            - name: Jwt__OAuthIssuer
+              value: "FundooOAuthServer"
+            - name: SmtpSettings__Host
+              value: "smtp.gmail.com"
+            - name: SmtpSettings__Port
+              value: "587"
+            - name: SmtpSettings__Username
+              value: "YOUR_EMAIL@gmail.com"
+            - name: SmtpSettings__Password
+              value: "YOUR_SMTP_APP_PASSWORD"
+            - name: SmtpSettings__EnableSsl
+              value: "True"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  type: ClusterIP
+  selector:
+    app: notification-service
+  ports:
+    - port: 80
+      targetPort: 80

@@ -5,8 +5,8 @@
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
-          "Host": "localhost",
-          "Port": 5284
+          "Host": "user-service",
+          "Port": 80
         }
       ],
       "UpstreamPathTemplate": "/api/v{version}/user/{everything}",
@@ -21,16 +21,16 @@
         "EnableRateLimiting": true,
         "Period": "1m",
         "PeriodTimespan": 60,
-        "Limit": 10
+        "Limit": 20
       }
     },
     {
-      "DownstreamPathTemplate": "/api/user/{everything}",
+      "DownstreamPathTemplate": "/api/v1/user/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
-          "Host": "localhost",
-          "Port": 5284
+          "Host": "user-service",
+          "Port": 80
         }
       ],
       "UpstreamPathTemplate": "/api/user/{everything}",
@@ -45,19 +45,19 @@
         "EnableRateLimiting": true,
         "Period": "1m",
         "PeriodTimespan": 60,
-        "Limit": 10
+        "Limit": 20
       }
     },
     {
-      "DownstreamPathTemplate": "/api/user/{everything}",
+      "DownstreamPathTemplate": "/api/v1/user/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
-          "Host": "localhost",
-          "Port": 5284
+          "Host": "user-service",
+          "Port": 80
         }
       ],
-      "UpstreamPathTemplate": "/api/users/{everything}",
+      "UpstreamPathTemplate": "/api/auth/{everything}",
       "UpstreamHttpMethod": [
         "GET",
         "POST",
@@ -69,7 +69,7 @@
         "EnableRateLimiting": true,
         "Period": "1m",
         "PeriodTimespan": 60,
-        "Limit": 10
+        "Limit": 20
       }
     },
     {
@@ -77,8 +77,8 @@
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
-          "Host": "localhost",
-          "Port": 5025
+          "Host": "notes-service",
+          "Port": 80
         }
       ],
       "UpstreamPathTemplate": "/api/notes/{everything}",
@@ -100,7 +100,36 @@
         "EnableRateLimiting": true,
         "Period": "1m",
         "PeriodTimespan": 60,
-        "Limit": 10
+        "Limit": 20
+      }
+    },
+    {
+      "DownstreamPathTemplate": "/api/notes",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "notes-service",
+          "Port": 80
+        }
+      ],
+      "UpstreamPathTemplate": "/api/notes",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "Bearer",
+        "AllowedScopes": []
+      },
+      "AddHeadersToRequest": {
+        "X-User-Id": "Claims[user_id] > value"
+      },
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 20
       }
     },
     {
@@ -108,8 +137,8 @@
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
-          "Host": "localhost",
-          "Port": 5059
+          "Host": "notification-service",
+          "Port": 80
         }
       ],
       "UpstreamPathTemplate": "/api/notification/{everything}",
@@ -122,12 +151,11 @@
         "EnableRateLimiting": true,
         "Period": "1m",
         "PeriodTimespan": 60,
-        "Limit": 10
+        "Limit": 20
       }
     }
   ],
   "GlobalConfiguration": {
-    "BaseUrl": "http://localhost:5050",
     "RateLimitOptions": {
       "ClientIdHeader": "ClientId",
       "QuotaExceededMessage": "Too many requests. Please try again later.",

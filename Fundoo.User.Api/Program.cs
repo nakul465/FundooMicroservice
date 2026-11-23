@@ -102,7 +102,7 @@ public class Program
         builder.Services.AddHttpClient<INotesServiceClient, NotesServiceClient>((services, client) =>
         {
             var configuration = services.GetRequiredService<IConfiguration>();
-            var baseUrl = configuration["NotesService:BaseUrl"];
+            var baseUrl = configuration["NotesService:BaseUrl"] ?? "http://localhost:5025";
             client.BaseAddress = new Uri(baseUrl);
         })
         .AddHttpMessageHandler<OAuthDelegatingHandler>();

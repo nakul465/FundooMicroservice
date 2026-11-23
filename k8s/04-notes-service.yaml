@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notes-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notes-service
+  template:
+    metadata:
+      labels:
+        app: notes-service
+    spec:
+      containers:
+        - name: notes-service
+          image: fundoo-notes:live
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ASPNETCORE_URLS
+              value: "http://+:80"
+            - name: ConnectionStrings__FundooNotesConnection
+              value: "Host=postgres-service;Port=5432;Database=NotesDb;Username=postgres;Password=FundooNotes@2026"
+            - name: Jwt__Key
+              value: "FundooSecretKeyForJwtAuthentication2026!#"
+            - name: Jwt__Issuer
+              value: "FundooApp"
+            - name: Jwt__Audience
+              value: "FundooUsers"
+            - name: Jwt__OAuthIssuer
+              value: "FundooOAuthServer"
+            - name: InternalServiceAuth__SecretKey
+              value: "FundooSecretKeyForJwtAuthentication2026!#"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notes-service
+spec:
+  type: ClusterIP
+  selector:
+    app: notes-service
+  ports:
+    - port: 80
+      targetPort: 80

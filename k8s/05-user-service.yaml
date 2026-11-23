@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+        - name: user-service
+          image: fundoo-user:live
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ASPNETCORE_URLS
+              value: "http://+:80"
+            - name: ConnectionStrings__FundooConnection
+              value: "Host=postgres-service;Port=5432;Database=UserDb;Username=postgres;Password=FundooNotes@2026"
+            - name: Jwt__Key
+              value: "FundooSecretKeyForJwtAuthentication2026!#"
+            - name: Jwt__Issuer
+              value: "FundooApp"
+            - name: Jwt__Audience
+              value: "FundooUsers"
+            - name: Jwt__OAuthIssuer
+              value: "FundooOAuthServer"
+            - name: Jwt__ExpiryMinutes
+              value: "60"
+            - name: NotificationService__BaseUrl
+              value: "http://notification-service"
+            - name: NotesService__BaseUrl
+              value: "http://notes-service"
+            - name: OAuth__Clients__UserService__Secret
+              value: "UserSvcSecret_2026!#"
+            - name: OAuth__Clients__GatewayService__Secret
+              value: "GatewaySvcSecret_2026!#"
+            - name: OAuth__Clients__NotificationService__Secret
+              value: "NotifySvcSecret_2026!#"
+            - name: Authentication__Google__ClientId
+              value: "YOUR_GOOGLE_CLIENT_ID"
+            - name: Authentication__Google__ClientSecret
+              value: "YOUR_GOOGLE_CLIENT_SECRET"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+    - port: 80
+      targetPort: 80

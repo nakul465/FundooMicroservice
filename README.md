@@ -1,6 +1,6 @@
 # Fundoo Microservices Architecture
 
-Fundoo is a cloud-ready, microservices-based notes management and user authentication system built with ASP.NET Core and PostgreSQL.
+Fundoo is a cloud-ready, microservices-based notes management and user authentication system built with ASP.NET Core (.NET 7) and PostgreSQL.
 
 ---
 
