@@ -16,6 +16,24 @@
       ]
     },
     {
+      "DownstreamPathTemplate": "/api/v1/user/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "user-service",
+          "Port": 80
+        }
+      ],
+      "UpstreamPathTemplate": "/api/v1/user/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS"
+      ]
+    },
+    {
       "DownstreamPathTemplate": "/api/v{version}/user/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
