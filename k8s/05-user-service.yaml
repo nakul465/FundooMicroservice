@@ -46,9 +46,15 @@ spec:
             - name: OAuth__Clients__NotificationService__Secret
               value: "NotifySvcSecret_2026!#"
             - name: Authentication__Google__ClientId
-              value: "YOUR_GOOGLE_CLIENT_ID"
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secret
+                  key: client-id
             - name: Authentication__Google__ClientSecret
-              value: "YOUR_GOOGLE_CLIENT_SECRET"
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-secret
+                  key: client-secret
             - name: Authentication__Google__PublicBaseUrl
               value: "https://172.198.78.144.sslip.io"
 ---
