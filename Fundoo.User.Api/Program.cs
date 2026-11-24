@@ -253,7 +253,8 @@ public class Program
                             query["redirect_uri"] = redirectUriBuilder.ToString();
                             uriBuilder.Query = query.ToString();
                         }
-                        context.Response.Redirect(uriBuilder.ToString());
+                        context.RedirectUri = uriBuilder.ToString();
+                        context.Response.Redirect(context.RedirectUri);
                         return Task.CompletedTask;
                     };
                 }
