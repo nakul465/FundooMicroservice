@@ -3,8 +3,9 @@ pipeline {
 
     environment {
         DOCKER_USER = 'nakul465'
-        DOTNET_ROOT = '/home/azureuser/.dotnet'
-        PATH = "/usr/local/bin:/usr/bin:/bin:/home/azureuser/.dotnet:${env.PATH}"
+        DOTNET_ROOT = '/usr/share/dotnet'
+        KUBECONFIG = '/var/lib/jenkins/.kube/config'
+        PATH = "/usr/local/bin:/usr/bin:/bin:/usr/share/dotnet:${env.PATH}"
     }
 
     stages {
