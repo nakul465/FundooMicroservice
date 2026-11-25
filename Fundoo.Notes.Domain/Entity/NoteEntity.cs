@@ -21,6 +21,8 @@ namespace Fundoo.Notes.Domain.Entity
 
         [Required]
         public int UserId { get; set; }
+
+        public List<LabelEntity> Labels { get; set; } = new();
     }
 }
 

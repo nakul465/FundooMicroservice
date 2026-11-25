@@ -305,9 +305,9 @@ public class Program
 
         var app = builder.Build();
 
+        app.UseSwagger();
         if (app.Environment.IsDevelopment())
         {
-            app.UseSwagger();
             app.UseSwaggerUI(options =>
             {
                 options.SwaggerEndpoint("/swagger/v1/swagger.json", "Fundoo User API v1");

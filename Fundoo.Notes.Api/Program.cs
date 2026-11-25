@@ -2,9 +2,12 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Fundoo.Notes.Api.Authentication;
+using Fundoo.Notes.Application.Features.Labels.Services;
 using Fundoo.Notes.Application.Features.Notes.Handler;
 using Fundoo.Notes.Application.Features.Notes.Services;
+using Fundoo.Notes.Infrastructure.Persistence;
 using Fundoo.Notes.Infrastructure.Persistence.Repository;
+using Fundoo.Notes.Infrastructure.Services.Labels;
 using Fundoo.Notes.Infrastructure.Services.Notes;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -16,7 +19,7 @@ namespace Fundoo.Notes.Api;
 
 public class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +61,9 @@ public class Program
 
         builder.Services.AddScoped<INotesRL, NotesRL>();
         builder.Services.AddScoped<INotesBL, NotesBL>();
+        builder.Services.AddScoped<ILabelRL, LabelRL>();
+        builder.Services.AddScoped<ILabelBL, LabelBL>();
+        builder.Services.AddSingleton<DatabaseInitializer>();
         builder.Services.AddScoped<ApiKeyAuthFilter>();
 
         // Configure OAuth 2.0 JWT Bearer Authentication
@@ -182,9 +188,9 @@ public class Program
 
         var app = builder.Build();
 
+        app.UseSwagger();
         if (app.Environment.IsDevelopment())
         {
-            app.UseSwagger();
             app.UseSwaggerUI();
         }
 
@@ -210,6 +216,17 @@ public class Program
             Predicate = check => check.Tags.Contains("ready")
         });
 
-        app.Run();
+        // Initialize database tables and indexes
+        try
+        {
+            var dbInitializer = app.Services.GetRequiredService<DatabaseInitializer>();
+            await dbInitializer.InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to initialize database schema.");
+        }
+
+        await app.RunAsync();
     }
 }

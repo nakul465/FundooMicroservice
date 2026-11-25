@@ -8,13 +8,15 @@ using Ocelot.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load Ocelot Configuration
-builder.Configuration.AddJsonFile("ocelot.json", optional: false, reloadOnChange: true);
-
+// Load Ocelot Configuration based on Environment
 if (builder.Environment.IsDevelopment())
 {
-    builder.Configuration.AddJsonFile("ocelot.Development.json", optional: true, reloadOnChange: true);
+    builder.Configuration.AddJsonFile("ocelot.Development.json", optional: false, reloadOnChange: true);
     builder.Configuration.AddUserSecrets(System.Reflection.Assembly.GetExecutingAssembly(), optional: true);
+}
+else
+{
+    builder.Configuration.AddJsonFile("ocelot.json", optional: false, reloadOnChange: true);
 }
 builder.Configuration.AddEnvironmentVariables();
 
@@ -60,9 +62,34 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddEndpointsApiExplorer();
+
 var app = builder.Build();
 
 app.UseCors("AllowAll");
+
+// Unified Swagger UI on API Gateway
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/user/v1/swagger.json", "Fundoo User Service API - v1");
+    c.SwaggerEndpoint("/swagger/user/v2/swagger.json", "Fundoo User Service API - v2");
+    c.SwaggerEndpoint("/swagger/notes/v1/swagger.json", "Fundoo Notes Service API");
+    c.SwaggerEndpoint("/swagger/notification/v1/swagger.json", "Fundoo Notification Service API");
+    c.RoutePrefix = "swagger";
+    c.DocumentTitle = "Fundoo API Gateway - Unified Swagger";
+});
+
+// Redirect root to Swagger UI
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path == "/" || context.Request.Path == "")
+    {
+        context.Response.Redirect("/swagger");
+        return;
+    }
+    await next();
+});
+
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {

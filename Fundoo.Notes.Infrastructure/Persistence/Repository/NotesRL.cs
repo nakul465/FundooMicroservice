@@ -65,7 +65,10 @@ namespace Fundoo.Notes.Infrastructure.Persistence.Repository
             await using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
-                return MapReaderToNote(reader);
+                var updatedNote = MapReaderToNote(reader);
+                await reader.CloseAsync();
+                await PopulateLabelsForNotesAsync(new List<NoteEntity> { updatedNote });
+                return updatedNote;
             }
 
             return null;
@@ -92,6 +95,9 @@ namespace Fundoo.Notes.Infrastructure.Persistence.Repository
                 notes.Add(MapReaderToNote(reader));
             }
 
+            await reader.CloseAsync();
+            await PopulateLabelsForNotesAsync(notes);
+
             return notes;
         }
 
@@ -112,7 +118,10 @@ namespace Fundoo.Notes.Infrastructure.Persistence.Repository
             await using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
-                return MapReaderToNote(reader);
+                var updatedNote = MapReaderToNote(reader);
+                await reader.CloseAsync();
+                await PopulateLabelsForNotesAsync(new List<NoteEntity> { updatedNote });
+                return updatedNote;
             }
 
             return null;
@@ -175,10 +184,56 @@ namespace Fundoo.Notes.Infrastructure.Persistence.Repository
             await using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
-                return MapReaderToNote(reader);
+                var updatedNote = MapReaderToNote(reader);
+                await reader.CloseAsync();
+                await PopulateLabelsForNotesAsync(new List<NoteEntity> { updatedNote });
+                return updatedNote;
             }
 
             return null;
+        }
+
+        private async Task PopulateLabelsForNotesAsync(List<NoteEntity> notes)
+        {
+            if (notes == null || notes.Count == 0) return;
+
+            var noteIds = notes.Select(n => n.NoteId).Distinct().ToArray();
+            const string query = @"
+                SELECT nl.""NoteId"", l.""LabelId"", l.""Name"", l.""UserId""
+                FROM ""NoteLabels"" nl
+                INNER JOIN ""Labels"" l ON nl.""LabelId"" = l.""LabelId""
+                WHERE nl.""NoteId"" = ANY(@NoteIds)
+                ORDER BY l.""Name"" ASC;";
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand(query, connection);
+            command.Parameters.AddWithValue("@NoteIds", noteIds);
+
+            var labelMap = notes.ToDictionary(n => n.NoteId, _ => new List<LabelEntity>());
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var noteId = reader.GetInt32(reader.GetOrdinal("NoteId"));
+                var label = new LabelEntity
+                {
+                    LabelId = reader.GetInt32(reader.GetOrdinal("LabelId")),
+                    Name = reader.GetString(reader.GetOrdinal("Name")),
+                    UserId = reader.GetInt32(reader.GetOrdinal("UserId"))
+                };
+
+                if (labelMap.TryGetValue(noteId, out var list))
+                {
+                    list.Add(label);
+                }
+            }
+
+            foreach (var note in notes)
+            {
+                note.Labels = labelMap.TryGetValue(note.NoteId, out var list) ? list : new List<LabelEntity>();
+            }
         }
 
         private static NoteEntity MapReaderToNote(NpgsqlDataReader reader)
