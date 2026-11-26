@@ -38,9 +38,15 @@ spec:
             - name: SmtpSettings__Port
               value: "587"
             - name: SmtpSettings__Username
-              value: "YOUR_EMAIL@gmail.com"
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-credentials
+                  key: username
             - name: SmtpSettings__Password
-              value: "YOUR_SMTP_APP_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-credentials
+                  key: password
             - name: SmtpSettings__EnableSsl
               value: "True"
 ---
