@@ -4,6 +4,7 @@ using System.Text;
 using Fundoo.Notification.Application.Feature.Notification.Services;
 using Fundoo.Notification.Infrastructure.Email;
 using Fundoo.Notification.Infrastructure.Email.Template;
+using Fundoo.Notification.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -29,6 +30,7 @@ public class Program
             builder.Configuration.GetSection("SmtpSettings"));
 
         builder.Services.AddScoped<IEmailService, EmailService>();
+        builder.Services.AddHostedService<KafkaEmailConsumerService>();
 
         // Configure OAuth 2.0 JWT Bearer Authentication for Service-to-Service communication
         var jwtKey = builder.Configuration["Jwt:Key"]

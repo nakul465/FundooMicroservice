@@ -44,7 +44,9 @@ namespace Fundoo.User.Application.Handler
                 return new ForgotPasswordResponseModel
                 {
                     Success = false,
-                    Message = "Password reset email could not be sent."
+                    Message = !string.IsNullOrWhiteSpace(emailResponse.Message)
+                        ? $"Password reset email could not be sent: {emailResponse.Message}"
+                        : "Password reset email could not be sent."
                 };
             }
 

@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: notes-service
-          image: fundoo-notes:live
-          imagePullPolicy: IfNotPresent
+          image: nakul465/fundoo-notes:live
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:

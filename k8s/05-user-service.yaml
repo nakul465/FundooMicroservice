@@ -35,8 +35,10 @@ spec:
               value: "FundooOAuthServer"
             - name: Jwt__ExpiryMinutes
               value: "60"
-            - name: NotificationService__BaseUrl
-              value: "http://notification-service"
+            - name: Kafka__BootstrapServers
+              value: "kafka-service:9092"
+            - name: Kafka__Topic
+              value: "email-notifications"
             - name: NotesService__BaseUrl
               value: "http://notes-service"
             - name: OAuth__Clients__UserService__Secret

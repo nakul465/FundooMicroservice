@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
         - name: notification-service
-          image: fundoo-notification:live
-          imagePullPolicy: IfNotPresent
+          image: nakul465/fundoo-notification:live
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:
@@ -23,6 +23,12 @@ spec:
               value: "Production"
             - name: ASPNETCORE_URLS
               value: "http://+:80"
+            - name: Kafka__BootstrapServers
+              value: "kafka-service:9092"
+            - name: Kafka__Topic
+              value: "email-notifications"
+            - name: Kafka__GroupId
+              value: "fundoo-notification-group"
             - name: Jwt__Key
               value: "FundooSecretKeyForJwtAuthentication2026!#"
             - name: Jwt__OAuthIssuer

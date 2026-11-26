@@ -9,10 +9,8 @@ using Fundoo.User.Infrastructure.Persistence.Repositories;
 using Fundoo.User.Infrastructure.Services.User;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Http.Resilience;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Polly;
 
 namespace Fundoo.User.Api;
 
@@ -49,54 +47,8 @@ public class Program
             options.SubstituteApiVersionInUrl = true;
         });
 
-        // HttpClient for Notification Service with Resilience Pipeline
-        builder.Services.AddHttpClient<IEmailService, EmailService>((services, client) =>
-        {
-            var configuration = services.GetRequiredService<IConfiguration>();
-
-            var baseUrl = configuration["NotificationService:BaseUrl"]
-                ?? throw new InvalidOperationException("NotificationService:BaseUrl configuration is missing.");
-
-            client.BaseAddress = new Uri(baseUrl);
-        })
-        .AddHttpMessageHandler<OAuthDelegatingHandler>()
-        .AddResilienceHandler("NotificationServicePipeline", pipelineBuilder =>
-        {
-            // 1. Outbound Rate Limiting (Token Bucket: max 20 requests per minute with burst up to 20)
-            pipelineBuilder.AddRateLimiter(new TokenBucketRateLimiter(
-                new TokenBucketRateLimiterOptions
-                {
-                    TokenLimit = 20,
-                    QueueLimit = 0,
-                    ReplenishmentPeriod = TimeSpan.FromMinutes(1),
-                    TokensPerPeriod = 20,
-                    AutoReplenishment = true
-                }));
-
-            // 2. Retry with Exponential Backoff + Jitter for transient errors (5xx, 408, network drops)
-            pipelineBuilder.AddRetry(new HttpRetryStrategyOptions
-            {
-                MaxRetryAttempts = 3,
-                BackoffType = DelayBackoffType.Exponential,
-                UseJitter = true,
-                Delay = TimeSpan.FromSeconds(2)
-            });
-
-            // 3. Circuit Breaker (Trips open if >= 50% requests fail over a 10s window with at least 4 requests)
-            pipelineBuilder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
-            {
-                FailureRatio = 0.5,
-                SamplingDuration = TimeSpan.FromSeconds(10),
-                MinimumThroughput = 4,
-                BreakDuration = TimeSpan.FromSeconds(15)
-            });
-
-            // 4. Per-Attempt Timeout (Limits each individual try to 5 seconds)
-            pipelineBuilder.AddTimeout(new HttpTimeoutStrategyOptions
-            {
-                Timeout = TimeSpan.FromSeconds(5)
-            });
-        });
+        // Kafka Email Producer for asynchronous, resilient notification delivery
+        builder.Services.AddSingleton<IEmailService, KafkaEmailProducer>();
 
         // HttpClient for Notes Service via OAuth M2M
         builder.Services.AddHttpClient<INotesServiceClient, NotesServiceClient>((services, client) =>

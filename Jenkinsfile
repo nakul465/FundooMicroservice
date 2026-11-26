@@ -59,6 +59,8 @@ pipeline {
                     kubectl rollout restart deployment gateway-deploy user-deploy notes-deploy notification-deploy
                     kubectl rollout status deployment gateway-deploy --timeout=120s
                     kubectl rollout status deployment user-deploy --timeout=120s
+                    kubectl rollout status deployment notification-deploy --timeout=120s
+                    kubectl rollout status deployment notes-deploy --timeout=120s
                 '''
             }
         }
