@@ -15,5 +15,12 @@ namespace Fundoo.Notes.Application.Features.Notes.Services
         Task<int> ArchUnarchNoteRL(NotesIdModel notesId, int userId);
         Task<int> TrashUnTrashRL(NotesIdModel notesId, int userId);
         Task<NoteEntity?> EditNoteRL(NoteEntity note, int userId);
+        Task<PagedNotesResponseModel> BrowseNotesPagedRL(BrowseNotesModel model, int userId);
+        Task<List<NoteEntity>> SearchNotesByTitleRL(string title, int userId);
+        Task<List<NoteEntity>> SearchNotesByContentRL(string content, int userId);
+        Task<List<NoteEntity>> BrowseNotesByLabelRL(int? labelId, string? labelName, int userId);
+        Task<List<NoteEntity>> SearchLabelledNotesRL(int? labelId, string? labelName, string keyword, int userId);
+        Task<bool> VerifyLabelBelongsToUserRL(int labelId, int userId);
+        Task<bool> VerifyLabelNameBelongsToUserRL(string labelName, int userId);
     }
 }

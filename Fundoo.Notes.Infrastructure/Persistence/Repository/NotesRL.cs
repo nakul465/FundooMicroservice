@@ -236,6 +236,282 @@ namespace Fundoo.Notes.Infrastructure.Persistence.Repository
             }
         }
 
+        public async Task<PagedNotesResponseModel> BrowseNotesPagedRL(BrowseNotesModel model, int userId)
+        {
+            var offset = (model.PageNumber - 1) * model.PageSize;
+
+            const string countQuery = @"
+                SELECT COUNT(*)
+                FROM ""Notes""
+                WHERE ""UserId"" = @UserId AND ""IsDeleted"" = FALSE;";
+
+            const string dataQuery = @"
+                SELECT ""NoteId"", ""Title"", ""Description"", ""Colour"", ""IsArchived"", ""IsDeleted"", ""UserId""
+                FROM ""Notes""
+                WHERE ""UserId"" = @UserId AND ""IsDeleted"" = FALSE
+                ORDER BY ""NoteId"" DESC
+                LIMIT @PageSize OFFSET @Offset;";
+
+            var notes = new List<NoteEntity>();
+            int totalCount = 0;
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using (var countCmd = new NpgsqlCommand(countQuery, connection))
+            {
+                countCmd.Parameters.AddWithValue("@UserId", userId);
+                var scalar = await countCmd.ExecuteScalarAsync();
+                totalCount = Convert.ToInt32(scalar);
+            }
+
+            await using (var dataCmd = new NpgsqlCommand(dataQuery, connection))
+            {
+                dataCmd.Parameters.AddWithValue("@UserId", userId);
+                dataCmd.Parameters.AddWithValue("@PageSize", model.PageSize);
+                dataCmd.Parameters.AddWithValue("@Offset", offset);
+
+                await using var reader = await dataCmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    notes.Add(MapReaderToNote(reader));
+                }
+            }
+
+            await PopulateLabelsForNotesAsync(notes);
+
+            int totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling((double)totalCount / model.PageSize);
+
+            return new PagedNotesResponseModel
+            {
+                Items = notes,
+                PageNumber = model.PageNumber,
+                PageSize = model.PageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages
+            };
+        }
+
+        public async Task<List<NoteEntity>> SearchNotesByTitleRL(string title, int userId)
+        {
+            const string query = @"
+                SELECT ""NoteId"", ""Title"", ""Description"", ""Colour"", ""IsArchived"", ""IsDeleted"", ""UserId""
+                FROM ""Notes""
+                WHERE ""UserId"" = @UserId AND ""IsDeleted"" = FALSE AND ""Title"" ILIKE '%' || @Title || '%'
+                ORDER BY ""NoteId"" DESC;";
+
+            var notes = new List<NoteEntity>();
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand(query, connection);
+            command.Parameters.AddWithValue("@UserId", userId);
+            command.Parameters.AddWithValue("@Title", title.Trim());
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                notes.Add(MapReaderToNote(reader));
+            }
+
+            await reader.CloseAsync();
+            await PopulateLabelsForNotesAsync(notes);
+
+            return notes;
+        }
+
+        public async Task<List<NoteEntity>> SearchNotesByContentRL(string content, int userId)
+        {
+            const string query = @"
+                SELECT ""NoteId"", ""Title"", ""Description"", ""Colour"", ""IsArchived"", ""IsDeleted"", ""UserId""
+                FROM ""Notes""
+                WHERE ""UserId"" = @UserId AND ""IsDeleted"" = FALSE AND ""Description"" ILIKE '%' || @Content || '%'
+                ORDER BY ""NoteId"" DESC;";
+
+            var notes = new List<NoteEntity>();
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand(query, connection);
+            command.Parameters.AddWithValue("@UserId", userId);
+            command.Parameters.AddWithValue("@Content", content.Trim());
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                notes.Add(MapReaderToNote(reader));
+            }
+
+            await reader.CloseAsync();
+            await PopulateLabelsForNotesAsync(notes);
+
+            return notes;
+        }
+
+        public async Task<bool> VerifyLabelBelongsToUserRL(int labelId, int userId)
+        {
+            const string query = @"
+                SELECT 1 FROM ""Labels""
+                WHERE ""LabelId"" = @LabelId AND ""UserId"" = @UserId LIMIT 1;";
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand(query, connection);
+            command.Parameters.AddWithValue("@LabelId", labelId);
+            command.Parameters.AddWithValue("@UserId", userId);
+
+            var result = await command.ExecuteScalarAsync();
+            return result != null;
+        }
+
+        public async Task<bool> VerifyLabelNameBelongsToUserRL(string labelName, int userId)
+        {
+            const string query = @"
+                SELECT 1 FROM ""Labels""
+                WHERE LOWER(""Name"") = LOWER(@LabelName) AND ""UserId"" = @UserId LIMIT 1;";
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand(query, connection);
+            command.Parameters.AddWithValue("@LabelName", labelName.Trim());
+            command.Parameters.AddWithValue("@UserId", userId);
+
+            var result = await command.ExecuteScalarAsync();
+            return result != null;
+        }
+
+        public async Task<List<NoteEntity>> BrowseNotesByLabelRL(int? labelId, string? labelName, int userId)
+        {
+            if (labelId.HasValue)
+            {
+                if (!await VerifyLabelBelongsToUserRL(labelId.Value, userId))
+                    throw new KeyNotFoundException("Label not found.");
+            }
+            else if (!string.IsNullOrWhiteSpace(labelName))
+            {
+                if (!await VerifyLabelNameBelongsToUserRL(labelName, userId))
+                    throw new KeyNotFoundException("Label not found.");
+            }
+            else
+            {
+                throw new ArgumentException("Either LabelId or LabelName must be provided.");
+            }
+
+            string query = @"
+                SELECT DISTINCT n.""NoteId"", n.""Title"", n.""Description"", n.""Colour"", n.""IsArchived"", n.""IsDeleted"", n.""UserId""
+                FROM ""Notes"" n
+                INNER JOIN ""NoteLabels"" nl ON n.""NoteId"" = nl.""NoteId""
+                INNER JOIN ""Labels"" l ON nl.""LabelId"" = l.""LabelId""
+                WHERE n.""UserId"" = @UserId AND n.""IsDeleted"" = FALSE";
+
+            if (labelId.HasValue)
+            {
+                query += @" AND nl.""LabelId"" = @LabelId";
+            }
+            else
+            {
+                query += @" AND LOWER(l.""Name"") = LOWER(@LabelName)";
+            }
+
+            query += @" ORDER BY n.""NoteId"" DESC;";
+
+            var notes = new List<NoteEntity>();
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand(query, connection);
+            command.Parameters.AddWithValue("@UserId", userId);
+            if (labelId.HasValue)
+            {
+                command.Parameters.AddWithValue("@LabelId", labelId.Value);
+            }
+            else
+            {
+                command.Parameters.AddWithValue("@LabelName", labelName!.Trim());
+            }
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                notes.Add(MapReaderToNote(reader));
+            }
+
+            await reader.CloseAsync();
+            await PopulateLabelsForNotesAsync(notes);
+
+            return notes;
+        }
+
+        public async Task<List<NoteEntity>> SearchLabelledNotesRL(int? labelId, string? labelName, string keyword, int userId)
+        {
+            if (labelId.HasValue)
+            {
+                if (!await VerifyLabelBelongsToUserRL(labelId.Value, userId))
+                    throw new KeyNotFoundException("Label not found.");
+            }
+            else if (!string.IsNullOrWhiteSpace(labelName))
+            {
+                if (!await VerifyLabelNameBelongsToUserRL(labelName, userId))
+                    throw new KeyNotFoundException("Label not found.");
+            }
+            else
+            {
+                throw new ArgumentException("Either LabelId or LabelName must be provided.");
+            }
+
+            string query = @"
+                SELECT DISTINCT n.""NoteId"", n.""Title"", n.""Description"", n.""Colour"", n.""IsArchived"", n.""IsDeleted"", n.""UserId""
+                FROM ""Notes"" n
+                INNER JOIN ""NoteLabels"" nl ON n.""NoteId"" = nl.""NoteId""
+                INNER JOIN ""Labels"" l ON nl.""LabelId"" = l.""LabelId""
+                WHERE n.""UserId"" = @UserId AND n.""IsDeleted"" = FALSE
+                  AND (n.""Title"" ILIKE '%' || @Keyword || '%' OR n.""Description"" ILIKE '%' || @Keyword || '%')";
+
+            if (labelId.HasValue)
+            {
+                query += @" AND nl.""LabelId"" = @LabelId";
+            }
+            else
+            {
+                query += @" AND LOWER(l.""Name"") = LOWER(@LabelName)";
+            }
+
+            query += @" ORDER BY n.""NoteId"" DESC;";
+
+            var notes = new List<NoteEntity>();
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync();
+
+            await using var command = new NpgsqlCommand(query, connection);
+            command.Parameters.AddWithValue("@UserId", userId);
+            command.Parameters.AddWithValue("@Keyword", keyword.Trim());
+            if (labelId.HasValue)
+            {
+                command.Parameters.AddWithValue("@LabelId", labelId.Value);
+            }
+            else
+            {
+                command.Parameters.AddWithValue("@LabelName", labelName!.Trim());
+            }
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                notes.Add(MapReaderToNote(reader));
+            }
+
+            await reader.CloseAsync();
+            await PopulateLabelsForNotesAsync(notes);
+
+            return notes;
+        }
+
         private static NoteEntity MapReaderToNote(NpgsqlDataReader reader)
         {
             return new NoteEntity

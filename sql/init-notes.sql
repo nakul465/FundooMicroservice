@@ -29,3 +29,6 @@ CREATE TABLE IF NOT EXISTS "NoteLabels" (
 
 CREATE INDEX IF NOT EXISTS "ix_notelabels_noteid" ON "NoteLabels" ("NoteId");
 CREATE INDEX IF NOT EXISTS "ix_notelabels_labelid" ON "NoteLabels" ("LabelId");
+
+CREATE INDEX IF NOT EXISTS "ix_notes_userid_isdeleted" ON "Notes" ("UserId", "IsDeleted");
+CREATE INDEX IF NOT EXISTS "ix_notes_userid_title" ON "Notes" ("UserId", "Title");

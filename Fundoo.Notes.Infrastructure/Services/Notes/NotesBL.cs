@@ -49,5 +49,40 @@ namespace Fundoo.Notes.Infrastructure.Services.Notes
         {
             return await _notesRL.TrashUnTrashRL(notesId, userId);
         }
+
+        public async Task<PagedNotesResponseModel> BrowseNotesPagedBL(BrowseNotesModel model, int userId)
+        {
+            return await _notesRL.BrowseNotesPagedRL(model, userId);
+        }
+
+        public async Task<List<NoteEntity>> SearchNotesByTitleBL(string title, int userId)
+        {
+            return await _notesRL.SearchNotesByTitleRL(title, userId);
+        }
+
+        public async Task<List<NoteEntity>> SearchNotesByContentBL(string content, int userId)
+        {
+            return await _notesRL.SearchNotesByContentRL(content, userId);
+        }
+
+        public async Task<List<NoteEntity>> BrowseNotesByLabelBL(int? labelId, string? labelName, int userId)
+        {
+            return await _notesRL.BrowseNotesByLabelRL(labelId, labelName, userId);
+        }
+
+        public async Task<List<NoteEntity>> SearchLabelledNotesBL(int? labelId, string? labelName, string keyword, int userId)
+        {
+            return await _notesRL.SearchLabelledNotesRL(labelId, labelName, keyword, userId);
+        }
+
+        public async Task<bool> VerifyLabelBelongsToUserBL(int labelId, int userId)
+        {
+            return await _notesRL.VerifyLabelBelongsToUserRL(labelId, userId);
+        }
+
+        public async Task<bool> VerifyLabelNameBelongsToUserBL(string labelName, int userId)
+        {
+            return await _notesRL.VerifyLabelNameBelongsToUserRL(labelName, userId);
+        }
     }
 }

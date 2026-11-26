@@ -50,6 +50,7 @@ namespace Fundoo.Notes.Api.Controllers
             return 0;
         }
 
+        // 1. Create Note
         [HttpPost("create")]
         public async Task<IActionResult> CreateNote([FromBody] NoteCreationModel note)
         {
@@ -66,7 +67,7 @@ namespace Fundoo.Notes.Api.Controllers
 
             var entity = await _sender.Send(new CreateNoteCommand(note, userId));
 
-            return Ok(new ResponseModel<NoteEntity>
+            return StatusCode(StatusCodes.Status201Created, new ResponseModel<NoteEntity>
             {
                 Success = true,
                 Message = "Note created successfully",
@@ -74,12 +75,22 @@ namespace Fundoo.Notes.Api.Controllers
             });
         }
 
-        [HttpPost("view-by-id")]
-        public async Task<IActionResult> ViewNoteById([FromBody] NotesIdModel notesId)
+        // 2. View Note by ID
+        [HttpGet("{noteId:int}")]
+        public async Task<IActionResult> GetNoteById([FromRoute] int noteId)
         {
             var userId = GetUserId();
-            var note = await _sender.Send(new GetNoteByIdQuery(notesId, userId));
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<NoteEntity>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
 
+            var note = await _sender.Send(new GetNoteByIdQuery(new NotesIdModel { NoteId = noteId }, userId));
             if (note == null)
             {
                 return NotFound(new ResponseModel<NoteEntity>
@@ -98,10 +109,21 @@ namespace Fundoo.Notes.Api.Controllers
             });
         }
 
+        // 3. View All Notes
         [HttpGet("all")]
         public async Task<IActionResult> ViewAllNotes()
         {
             var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
             var notes = await _sender.Send(new GetAllNotesQuery(userId));
 
             return Ok(new ResponseModel<List<NoteEntity>>
@@ -112,10 +134,22 @@ namespace Fundoo.Notes.Api.Controllers
             });
         }
 
-        [HttpPost("edit")]
-        public async Task<IActionResult> EditNote([FromBody] EditNoteModel editNoteModel)
+        // 4. Update Note
+        [HttpPut("{noteId:int}")]
+        public async Task<IActionResult> UpdateNote([FromRoute] int noteId, [FromBody] EditNoteModel editNoteModel)
         {
             var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<NoteEntity>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
+            editNoteModel.NoteId = noteId;
             var editedNote = await _sender.Send(new EditNoteCommand(editNoteModel, userId));
 
             if (editedNote == null)
@@ -136,11 +170,17 @@ namespace Fundoo.Notes.Api.Controllers
             });
         }
 
-        [HttpPost("delete")]
-        public async Task<IActionResult> DeleteNote([FromBody] NotesIdModel notesId)
+        // 5. Delete Note
+        [HttpDelete("{noteId:int}")]
+        public async Task<IActionResult> DeleteNote([FromRoute] int noteId)
         {
             var userId = GetUserId();
-            var deletedNote = await _sender.Send(new DeleteNoteCommand(notesId, userId));
+            if (userId <= 0)
+            {
+                return Unauthorized();
+            }
+
+            var deletedNote = await _sender.Send(new DeleteNoteCommand(new NotesIdModel { NoteId = noteId }, userId));
 
             if (deletedNote == null)
             {
@@ -152,18 +192,20 @@ namespace Fundoo.Notes.Api.Controllers
                 });
             }
 
-            return Ok(new ResponseModel<NoteEntity>
-            {
-                Success = true,
-                Message = "Note Deleted",
-                Data = deletedNote
-            });
+            return NoContent();
         }
 
-        [HttpPost("archive")]
-        public async Task<IActionResult> ArchUnarchNote([FromBody] NotesIdModel notesId)
+        // 6. Archive / Unarchive Note
+        [HttpPatch("{noteId:int}/archive")]
+        public async Task<IActionResult> ArchUnarchNote([FromRoute] int noteId)
         {
             var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized();
+            }
+
+            var notesId = new NotesIdModel { NoteId = noteId };
             var affectedRows = await _sender.Send(new ArchiveNoteCommand(notesId, userId));
 
             if (affectedRows == 0)
@@ -184,10 +226,17 @@ namespace Fundoo.Notes.Api.Controllers
             });
         }
 
-        [HttpPost("trash")]
-        public async Task<IActionResult> TrashUnTrash([FromBody] NotesIdModel notesId)
+        // 7. Trash / Untrash Note
+        [HttpPatch("{noteId:int}/trash")]
+        public async Task<IActionResult> TrashUnTrash([FromRoute] int noteId)
         {
             var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized();
+            }
+
+            var notesId = new NotesIdModel { NoteId = noteId };
             var affectedRows = await _sender.Send(new TrashNoteCommand(notesId, userId));
 
             if (affectedRows == 0)
@@ -206,6 +255,223 @@ namespace Fundoo.Notes.Api.Controllers
                 Message = "Note Trashed/Untrashed",
                 Data = notesId
             });
+        }
+
+        // 8. Expectation 1 & 7: Browsing a Large Notes Collection (with Pagination)
+        [HttpGet("browse")]
+        public async Task<IActionResult> BrowseNotesPaged([FromQuery] BrowseNotesModel model)
+        {
+            var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<PagedNotesResponseModel>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
+            try
+            {
+                var result = await _sender.Send(new BrowseNotesPagedQuery(model, userId));
+
+                string message;
+                if (result.TotalCount == 0)
+                {
+                    message = "No matching notes found.";
+                }
+                else if (model.PageNumber > result.TotalPages)
+                {
+                    message = $"Page is out of range. No notes found on page {model.PageNumber}.";
+                }
+                else
+                {
+                    message = "Notes retrieved successfully";
+                }
+
+                return Ok(new ResponseModel<PagedNotesResponseModel>
+                {
+                    Success = true,
+                    Message = message,
+                    Data = result
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ResponseModel<PagedNotesResponseModel>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Data = null
+                });
+            }
+        }
+
+        // Expectation 2 & 6: Finding a Note by Its Title
+        [HttpGet("search/title")]
+        public async Task<IActionResult> SearchByTitle([FromQuery] SearchNoteByTitleModel model)
+        {
+            var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
+            try
+            {
+                var notes = await _sender.Send(new SearchNotesByTitleQuery(model, userId));
+
+                return Ok(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = true,
+                    Message = notes.Count == 0 ? "No matching notes found." : "Notes found matching title search.",
+                    Data = notes
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Data = null
+                });
+            }
+        }
+
+        // Expectation 3 & 6: Finding Information Within a Note (Content / Description)
+        [HttpGet("search/content")]
+        public async Task<IActionResult> SearchByContent([FromQuery] SearchNoteByContentModel model)
+        {
+            var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
+            try
+            {
+                var notes = await _sender.Send(new SearchNotesByContentQuery(model, userId));
+
+                return Ok(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = true,
+                    Message = notes.Count == 0 ? "No matching notes found." : "Notes found matching content search.",
+                    Data = notes
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Data = null
+                });
+            }
+        }
+
+        // Expectation 4, 6 & 7: Browsing Notes by Label
+        [HttpGet("by-label")]
+        public async Task<IActionResult> BrowseByLabel([FromQuery] BrowseNotesByLabelModel model)
+        {
+            var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
+            try
+            {
+                var notes = await _sender.Send(new BrowseNotesByLabelQuery(model, userId));
+
+                return Ok(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = true,
+                    Message = notes.Count == 0 ? "No matching notes found." : "Labelled notes retrieved successfully.",
+                    Data = notes
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = "Label not found.",
+                    Data = null
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Data = null
+                });
+            }
+        }
+
+        // Expectation 5 & 6: Finding a Note Within a Labelled Collection (Label + Keyword)
+        [HttpGet("by-label/search")]
+        public async Task<IActionResult> SearchLabelledNotes([FromQuery] SearchLabelledNotesModel model)
+        {
+            var userId = GetUserId();
+            if (userId <= 0)
+            {
+                return Unauthorized(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = "Unauthorized: Could not determine valid User ID from token.",
+                    Data = null
+                });
+            }
+
+            try
+            {
+                var notes = await _sender.Send(new SearchLabelledNotesQuery(model, userId));
+
+                return Ok(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = true,
+                    Message = notes.Count == 0 ? "No matching notes found." : "Matching notes found in labelled collection.",
+                    Data = notes
+                });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = "Label not found.",
+                    Data = null
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ResponseModel<List<NoteEntity>>
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    Data = null
+                });
+            }
         }
     }
 }
